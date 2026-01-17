@@ -28,14 +28,19 @@ echo
 echo "[2/3] Setting up skill template..."
 mkdir -p "$SKILL_DIR"
 
+LATEST_FILE="$SKILL_DIR/SKILL.md.latest"
+
 if [ -f "$SKILL_FILE" ]; then
-    echo "  $SKILL_FILE already exists. Skipping (not overwriting)."
-    echo "  To update manually, see: https://github.com/graileanu/clawdbot-pipedrive/blob/master/examples/SKILL-TEMPLATE.md"
+    echo "  $SKILL_FILE already exists (not overwriting your customizations)."
+    # Download latest template for comparison
+    curl -sL "https://raw.githubusercontent.com/graileanu/clawdbot-pipedrive/master/examples/SKILL-TEMPLATE.md" -o "$LATEST_FILE"
+    echo "  Latest template saved to: $LATEST_FILE"
+    echo "  Compare changes: diff $SKILL_FILE $LATEST_FILE"
 else
     # Download template from GitHub
     curl -sL "https://raw.githubusercontent.com/graileanu/clawdbot-pipedrive/master/examples/SKILL-TEMPLATE.md" -o "$SKILL_FILE"
     echo "  Created $SKILL_FILE"
-    echo "  Edit this file to customize for your organization."
+    echo "  Customize this file for your organization's workflows."
 fi
 echo
 
