@@ -100,6 +100,7 @@ function setupSkillTemplate(): void {
 type PipedriveConfig = {
   apiKey?: string;
   domain?: string;
+  siteUrl?: string; // alias for domain
 };
 
 type ClawdbotPluginApi = {
@@ -141,7 +142,7 @@ const plugin: ClawdbotPluginDefinition = {
       domain: {
         label: "Company Domain",
         placeholder: "yourcompany",
-        help: "The subdomain of your Pipedrive account (e.g., 'acme' from acme.pipedrive.com)",
+        help: "The subdomain of your Pipedrive account (e.g., 'acme' from acme.pipedrive.com). Also accepts 'siteUrl' as alias.",
       },
     },
   },
@@ -150,14 +151,15 @@ const plugin: ClawdbotPluginDefinition = {
     setupSkillTemplate();
 
     const cfg = api.pluginConfig as PipedriveConfig;
+    const domain = cfg.domain || cfg.siteUrl; // accept both domain and siteUrl
 
-    if (!cfg.apiKey || !cfg.domain) {
-      console.warn("[pipedrive] Plugin not configured: missing apiKey or domain");
+    if (!cfg.apiKey || !domain) {
+      console.warn("[pipedrive] Plugin not configured: missing apiKey or domain/siteUrl");
       return;
     }
 
-    const baseUrlV2 = `https://${cfg.domain}.pipedrive.com/api/v2`;
-    const baseUrlV1 = `https://${cfg.domain}.pipedrive.com/api/v1`; // For endpoints not yet in v2
+    const baseUrlV2 = `https://${domain}.pipedrive.com/api/v2`;
+    const baseUrlV1 = `https://${domain}.pipedrive.com/api/v1`; // For endpoints not yet in v2
 
     async function pipedriveRequest(endpoint: string, options?: RequestInit & { useV1?: boolean }) {
       const baseUrl = options?.useV1 ? baseUrlV1 : baseUrlV2;
@@ -805,7 +807,7 @@ const plugin: ClawdbotPluginDefinition = {
 
     const v2Tools = 22;
     const v1Tools = 6;
-    console.log(`[pipedrive] Registered ${v2Tools + v1Tools} tools (${v2Tools} v2, ${v1Tools} v1) for ${cfg.domain}.pipedrive.com`);
+    console.log(`[pipedrive] Registered ${v2Tools + v1Tools} tools (${v2Tools} v2, ${v1Tools} v1) for ${domain}.pipedrive.com`);
   },
 };
 
