@@ -2,6 +2,8 @@
 
 Pipedrive CRM integration plugin for [Clawdbot](https://clawd.bot).
 
+This plugin allows Clawdbot to interact with your Pipedrive CRM - search deals, create contacts, manage activities, and automate your sales workflows through natural language commands.
+
 **Now using Pipedrive API v2** - 50% lower token costs, better filtering, cursor-based pagination.
 
 ## Features
@@ -105,6 +107,13 @@ cp examples/SKILL-TEMPLATE.md ~/.clawdbot/skills/pipedrive/SKILL.md
 ```
 
 See [examples/SKILL-TEMPLATE.md](examples/SKILL-TEMPLATE.md) for a starting point.
+
+## Support & Contact
+
+For questions, bug reports, or feature requests:
+
+- **GitHub Issues**: [github.com/graileanu/clawdbot-pipedrive/issues](https://github.com/graileanu/clawdbot-pipedrive/issues)
+- **Email**: gr@remsys.com
 
 ## License
 
