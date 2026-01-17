@@ -14,20 +14,11 @@ Pipedrive CRM integration plugin for [Clawdbot](https://clawd.bot).
 
 ## Installation
 
-### Option 1: Install from npm (when published)
-
 ```bash
 clawdbot plugins install clawdbot-pipedrive
 ```
 
-### Option 2: Manual installation
-
-Copy this folder to `~/.clawdbot/extensions/pipedrive/`
-
-Or create a symlink for development:
-```bash
-ln -s /path/to/clawdbot-pipedrive ~/.clawdbot/extensions/pipedrive
-```
+Or manually: copy to `~/.clawdbot/extensions/pipedrive/`
 
 ## Configuration
 
@@ -91,7 +82,17 @@ Your domain is the subdomain of your Pipedrive URL:
 
 ## Custom Skills
 
-For organization-specific workflows (naming conventions, required fields, etc.), create a skill at `~/.clawdbot/skills/your-crm/SKILL.md`. Skills provide instructions to the AI without modifying the plugin.
+For organization-specific workflows (naming conventions, required fields, etc.), create a skill:
+
+```bash
+# Copy the template
+mkdir -p ~/.clawdbot/skills/pipedrive-crm
+cp examples/SKILL-TEMPLATE.md ~/.clawdbot/skills/pipedrive-crm/SKILL.md
+
+# Then customize with your pipeline stages, naming conventions, etc.
+```
+
+See [examples/SKILL-TEMPLATE.md](examples/SKILL-TEMPLATE.md) for a starting point.
 
 ## License
 
