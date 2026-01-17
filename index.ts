@@ -80,15 +80,12 @@ function setupSkillTemplate(): void {
     mkdirSync(skillDir, { recursive: true });
 
     if (!existsSync(skillFile)) {
-      // First install - create the skill file
       writeFileSync(skillFile, SKILL_TEMPLATE);
       console.log(`[pipedrive] Created skill template: ${skillFile}`);
       console.log("[pipedrive] Customize this file with your organization's workflows.");
     } else {
-      // Skill exists - check if template has changed
       const existing = readFileSync(skillFile, "utf-8");
       if (existing !== SKILL_TEMPLATE) {
-        // Save latest template for comparison
         writeFileSync(latestFile, SKILL_TEMPLATE);
         console.log(`[pipedrive] Skill file exists: ${skillFile} (not modified)`);
         console.log(`[pipedrive] New template available: ${latestFile}`);
@@ -130,8 +127,8 @@ type ClawdbotPluginDefinition = {
 const plugin: ClawdbotPluginDefinition = {
   id: "pipedrive",
   name: "Pipedrive CRM",
-  description: "Interact with Pipedrive deals, persons, organizations, and activities",
-  version: "1.0.0",
+  description: "Interact with Pipedrive deals, persons, organizations, and activities (API v2)",
+  version: "2.0.0",
 
   configSchema: {
     parse: (v) => v as PipedriveConfig,
@@ -150,7 +147,6 @@ const plugin: ClawdbotPluginDefinition = {
   },
 
   register(api) {
-    // Set up skill template on first run
     setupSkillTemplate();
 
     const cfg = api.pluginConfig as PipedriveConfig;
@@ -160,16 +156,20 @@ const plugin: ClawdbotPluginDefinition = {
       return;
     }
 
-    const baseUrl = `https://${cfg.domain}.pipedrive.com/api/v1`;
+    const baseUrlV2 = `https://${cfg.domain}.pipedrive.com/api/v2`;
+    const baseUrlV1 = `https://${cfg.domain}.pipedrive.com/api/v1`; // For endpoints not yet in v2
 
-    async function pipedriveRequest(endpoint: string, options?: RequestInit) {
+    async function pipedriveRequest(endpoint: string, options?: RequestInit & { useV1?: boolean }) {
+      const baseUrl = options?.useV1 ? baseUrlV1 : baseUrlV2;
       const url = new URL(`${baseUrl}${endpoint}`);
       url.searchParams.set("api_token", cfg.apiKey!);
+
+      const { useV1, ...fetchOptions } = options || {};
       const res = await fetch(url.toString(), {
-        ...options,
+        ...fetchOptions,
         headers: {
           "Content-Type": "application/json",
-          ...options?.headers,
+          ...fetchOptions?.headers,
         },
       });
       if (!res.ok) {
@@ -179,7 +179,7 @@ const plugin: ClawdbotPluginDefinition = {
       return res.json();
     }
 
-    // ============ DEALS ============
+    // ============ DEALS (v2) ============
 
     api.registerTool({
       name: "pipedrive_search_deals",
@@ -187,14 +187,16 @@ const plugin: ClawdbotPluginDefinition = {
       parameters: Type.Object({
         term: Type.String({ description: "Search term" }),
         status: Type.Optional(
-          Type.String({ description: "Filter by status: open, won, lost, deleted, all_not_deleted" })
+          Type.String({ description: "Filter by status: open, won, lost, deleted" })
         ),
+        limit: Type.Optional(Type.Number({ description: "Number of results (default 100)" })),
       }),
       async execute(_id, params) {
-        const { term, status } = params as { term: string; status?: string };
-        let endpoint = `/deals/search?term=${encodeURIComponent(term)}`;
-        if (status) endpoint += `&status=${status}`;
-        const data = await pipedriveRequest(endpoint);
+        const { term, status, limit } = params as { term: string; status?: string; limit?: number };
+        const query = new URLSearchParams({ term });
+        if (status) query.set("status", status);
+        if (limit) query.set("limit", String(limit));
+        const data = await pipedriveRequest(`/deals/search?${query}`);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
@@ -216,26 +218,22 @@ const plugin: ClawdbotPluginDefinition = {
       name: "pipedrive_list_deals",
       description: "List deals with optional filters",
       parameters: Type.Object({
-        status: Type.Optional(Type.String({ description: "Filter by status: open, won, lost, deleted, all_not_deleted" })),
+        status: Type.Optional(Type.String({ description: "Filter by status: open, won, lost, deleted" })),
         stage_id: Type.Optional(Type.Number({ description: "Filter by pipeline stage ID" })),
-        user_id: Type.Optional(Type.Number({ description: "Filter by owner user ID" })),
+        owner_id: Type.Optional(Type.Number({ description: "Filter by owner user ID" })),
+        person_id: Type.Optional(Type.Number({ description: "Filter by person ID" })),
+        org_id: Type.Optional(Type.Number({ description: "Filter by organization ID" })),
+        pipeline_id: Type.Optional(Type.Number({ description: "Filter by pipeline ID" })),
         limit: Type.Optional(Type.Number({ description: "Number of results (default 100, max 500)" })),
-        start: Type.Optional(Type.Number({ description: "Pagination start (default 0)" })),
+        cursor: Type.Optional(Type.String({ description: "Pagination cursor from previous response" })),
+        sort_by: Type.Optional(Type.String({ description: "Sort by: id, add_time, update_time" })),
+        sort_direction: Type.Optional(Type.String({ description: "Sort direction: asc, desc" })),
       }),
       async execute(_id, params) {
-        const { status, stage_id, user_id, limit, start } = params as {
-          status?: string;
-          stage_id?: number;
-          user_id?: number;
-          limit?: number;
-          start?: number;
-        };
         const query = new URLSearchParams();
-        if (status) query.set("status", status);
-        if (stage_id) query.set("stage_id", String(stage_id));
-        if (user_id) query.set("user_id", String(user_id));
-        if (limit) query.set("limit", String(limit));
-        if (start) query.set("start", String(start));
+        for (const [key, value] of Object.entries(params)) {
+          if (value !== undefined) query.set(key, String(value));
+        }
         const data = await pipedriveRequest(`/deals?${query}`);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
@@ -251,7 +249,8 @@ const plugin: ClawdbotPluginDefinition = {
         person_id: Type.Optional(Type.Number({ description: "Associated person/contact ID" })),
         org_id: Type.Optional(Type.Number({ description: "Associated organization ID" })),
         stage_id: Type.Optional(Type.Number({ description: "Pipeline stage ID" })),
-        user_id: Type.Optional(Type.Number({ description: "Owner user ID" })),
+        owner_id: Type.Optional(Type.Number({ description: "Owner user ID" })),
+        pipeline_id: Type.Optional(Type.Number({ description: "Pipeline ID" })),
         expected_close_date: Type.Optional(Type.String({ description: "Expected close date (YYYY-MM-DD)" })),
       }),
       async execute(_id, params) {
@@ -273,14 +272,15 @@ const plugin: ClawdbotPluginDefinition = {
         currency: Type.Optional(Type.String({ description: "Currency code" })),
         status: Type.Optional(Type.String({ description: "Status: open, won, lost, deleted" })),
         stage_id: Type.Optional(Type.Number({ description: "Move to stage ID" })),
-        user_id: Type.Optional(Type.Number({ description: "New owner user ID" })),
+        owner_id: Type.Optional(Type.Number({ description: "New owner user ID" })),
+        pipeline_id: Type.Optional(Type.Number({ description: "Move to pipeline ID" })),
         expected_close_date: Type.Optional(Type.String({ description: "Expected close date (YYYY-MM-DD)" })),
         lost_reason: Type.Optional(Type.String({ description: "Reason for losing (when status=lost)" })),
       }),
       async execute(_id, params) {
         const { id, ...updateParams } = params as { id: number } & Record<string, unknown>;
         const data = await pipedriveRequest(`/deals/${id}`, {
-          method: "PUT",
+          method: "PATCH", // v2 uses PATCH instead of PUT
           body: JSON.stringify(updateParams),
         });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -289,7 +289,7 @@ const plugin: ClawdbotPluginDefinition = {
 
     api.registerTool({
       name: "pipedrive_delete_deal",
-      description: "Delete a deal",
+      description: "Delete a deal (marks as deleted, 30-day retention)",
       parameters: Type.Object({
         id: Type.Number({ description: "Deal ID to delete" }),
       }),
@@ -300,17 +300,20 @@ const plugin: ClawdbotPluginDefinition = {
       },
     });
 
-    // ============ PERSONS (CONTACTS) ============
+    // ============ PERSONS (v2) ============
 
     api.registerTool({
       name: "pipedrive_search_persons",
-      description: "Search for persons/contacts in Pipedrive",
+      description: "Search for persons/contacts by name, email, phone, or notes",
       parameters: Type.Object({
         term: Type.String({ description: "Search term (name, email, phone)" }),
+        limit: Type.Optional(Type.Number({ description: "Number of results" })),
       }),
       async execute(_id, params) {
-        const { term } = params as { term: string };
-        const data = await pipedriveRequest(`/persons/search?term=${encodeURIComponent(term)}`);
+        const { term, limit } = params as { term: string; limit?: number };
+        const query = new URLSearchParams({ term });
+        if (limit) query.set("limit", String(limit));
+        const data = await pipedriveRequest(`/persons/search?${query}`);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
@@ -329,6 +332,27 @@ const plugin: ClawdbotPluginDefinition = {
     });
 
     api.registerTool({
+      name: "pipedrive_list_persons",
+      description: "List all persons with optional filters",
+      parameters: Type.Object({
+        owner_id: Type.Optional(Type.Number({ description: "Filter by owner user ID" })),
+        org_id: Type.Optional(Type.Number({ description: "Filter by organization ID" })),
+        limit: Type.Optional(Type.Number({ description: "Number of results (default 100)" })),
+        cursor: Type.Optional(Type.String({ description: "Pagination cursor" })),
+        sort_by: Type.Optional(Type.String({ description: "Sort by: id, add_time, update_time, name" })),
+        sort_direction: Type.Optional(Type.String({ description: "Sort direction: asc, desc" })),
+      }),
+      async execute(_id, params) {
+        const query = new URLSearchParams();
+        for (const [key, value] of Object.entries(params)) {
+          if (value !== undefined) query.set(key, String(value));
+        }
+        const data = await pipedriveRequest(`/persons?${query}`);
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    api.registerTool({
       name: "pipedrive_create_person",
       description: "Create a new person/contact",
       parameters: Type.Object({
@@ -336,11 +360,18 @@ const plugin: ClawdbotPluginDefinition = {
         email: Type.Optional(Type.String({ description: "Email address" })),
         phone: Type.Optional(Type.String({ description: "Phone number" })),
         org_id: Type.Optional(Type.Number({ description: "Associated organization ID" })),
+        owner_id: Type.Optional(Type.Number({ description: "Owner user ID" })),
       }),
       async execute(_id, params) {
+        // v2 expects email/phone as arrays of objects
+        const { email, phone, ...rest } = params as { email?: string; phone?: string } & Record<string, unknown>;
+        const body: Record<string, unknown> = { ...rest };
+        if (email) body.emails = [{ value: email, primary: true, label: "work" }];
+        if (phone) body.phones = [{ value: phone, primary: true, label: "work" }];
+
         const data = await pipedriveRequest("/persons", {
           method: "POST",
-          body: JSON.stringify(params),
+          body: JSON.stringify(body),
         });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
@@ -355,28 +386,49 @@ const plugin: ClawdbotPluginDefinition = {
         email: Type.Optional(Type.String({ description: "New email" })),
         phone: Type.Optional(Type.String({ description: "New phone" })),
         org_id: Type.Optional(Type.Number({ description: "New organization ID" })),
+        owner_id: Type.Optional(Type.Number({ description: "New owner user ID" })),
       }),
       async execute(_id, params) {
-        const { id, ...updateParams } = params as { id: number } & Record<string, unknown>;
+        const { id, email, phone, ...rest } = params as { id: number; email?: string; phone?: string } & Record<string, unknown>;
+        const body: Record<string, unknown> = { ...rest };
+        if (email) body.emails = [{ value: email, primary: true, label: "work" }];
+        if (phone) body.phones = [{ value: phone, primary: true, label: "work" }];
+
         const data = await pipedriveRequest(`/persons/${id}`, {
-          method: "PUT",
-          body: JSON.stringify(updateParams),
+          method: "PATCH",
+          body: JSON.stringify(body),
         });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
 
-    // ============ ORGANIZATIONS ============
+    api.registerTool({
+      name: "pipedrive_delete_person",
+      description: "Delete a person (marks as deleted, 30-day retention)",
+      parameters: Type.Object({
+        id: Type.Number({ description: "Person ID to delete" }),
+      }),
+      async execute(_id, params) {
+        const { id } = params as { id: number };
+        const data = await pipedriveRequest(`/persons/${id}`, { method: "DELETE" });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    // ============ ORGANIZATIONS (v2) ============
 
     api.registerTool({
       name: "pipedrive_search_organizations",
-      description: "Search for organizations in Pipedrive",
+      description: "Search for organizations by name, address, or notes",
       parameters: Type.Object({
         term: Type.String({ description: "Search term (organization name)" }),
+        limit: Type.Optional(Type.Number({ description: "Number of results" })),
       }),
       async execute(_id, params) {
-        const { term } = params as { term: string };
-        const data = await pipedriveRequest(`/organizations/search?term=${encodeURIComponent(term)}`);
+        const { term, limit } = params as { term: string; limit?: number };
+        const query = new URLSearchParams({ term });
+        if (limit) query.set("limit", String(limit));
+        const data = await pipedriveRequest(`/organizations/search?${query}`);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
@@ -395,11 +447,32 @@ const plugin: ClawdbotPluginDefinition = {
     });
 
     api.registerTool({
+      name: "pipedrive_list_organizations",
+      description: "List all organizations with optional filters",
+      parameters: Type.Object({
+        owner_id: Type.Optional(Type.Number({ description: "Filter by owner user ID" })),
+        limit: Type.Optional(Type.Number({ description: "Number of results (default 100)" })),
+        cursor: Type.Optional(Type.String({ description: "Pagination cursor" })),
+        sort_by: Type.Optional(Type.String({ description: "Sort by: id, add_time, update_time, name" })),
+        sort_direction: Type.Optional(Type.String({ description: "Sort direction: asc, desc" })),
+      }),
+      async execute(_id, params) {
+        const query = new URLSearchParams();
+        for (const [key, value] of Object.entries(params)) {
+          if (value !== undefined) query.set(key, String(value));
+        }
+        const data = await pipedriveRequest(`/organizations?${query}`);
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    api.registerTool({
       name: "pipedrive_create_organization",
       description: "Create a new organization",
       parameters: Type.Object({
         name: Type.String({ description: "Organization name (required)" }),
         address: Type.Optional(Type.String({ description: "Address" })),
+        owner_id: Type.Optional(Type.Number({ description: "Owner user ID" })),
       }),
       async execute(_id, params) {
         const data = await pipedriveRequest("/organizations", {
@@ -410,7 +483,39 @@ const plugin: ClawdbotPluginDefinition = {
       },
     });
 
-    // ============ ACTIVITIES ============
+    api.registerTool({
+      name: "pipedrive_update_organization",
+      description: "Update an existing organization",
+      parameters: Type.Object({
+        id: Type.Number({ description: "Organization ID to update (required)" }),
+        name: Type.Optional(Type.String({ description: "New name" })),
+        address: Type.Optional(Type.String({ description: "New address" })),
+        owner_id: Type.Optional(Type.Number({ description: "New owner user ID" })),
+      }),
+      async execute(_id, params) {
+        const { id, ...updateParams } = params as { id: number } & Record<string, unknown>;
+        const data = await pipedriveRequest(`/organizations/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify(updateParams),
+        });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    api.registerTool({
+      name: "pipedrive_delete_organization",
+      description: "Delete an organization (marks as deleted, 30-day retention)",
+      parameters: Type.Object({
+        id: Type.Number({ description: "Organization ID to delete" }),
+      }),
+      async execute(_id, params) {
+        const { id } = params as { id: number };
+        const data = await pipedriveRequest(`/organizations/${id}`, { method: "DELETE" });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    // ============ ACTIVITIES (v2) ============
 
     api.registerTool({
       name: "pipedrive_list_activities",
@@ -419,10 +524,13 @@ const plugin: ClawdbotPluginDefinition = {
         deal_id: Type.Optional(Type.Number({ description: "Filter by deal ID" })),
         person_id: Type.Optional(Type.Number({ description: "Filter by person ID" })),
         org_id: Type.Optional(Type.Number({ description: "Filter by organization ID" })),
-        done: Type.Optional(Type.Number({ description: "Filter by completion: 0 = not done, 1 = done" })),
+        owner_id: Type.Optional(Type.Number({ description: "Filter by owner user ID" })),
+        done: Type.Optional(Type.Boolean({ description: "Filter by completion: true = done, false = not done" })),
         type: Type.Optional(Type.String({ description: "Filter by type: call, meeting, task, deadline, email, lunch" })),
         limit: Type.Optional(Type.Number({ description: "Number of results (default 100)" })),
-        start: Type.Optional(Type.Number({ description: "Pagination start" })),
+        cursor: Type.Optional(Type.String({ description: "Pagination cursor" })),
+        sort_by: Type.Optional(Type.String({ description: "Sort by: id, add_time, update_time, due_date" })),
+        sort_direction: Type.Optional(Type.String({ description: "Sort direction: asc, desc" })),
       }),
       async execute(_id, params) {
         const query = new URLSearchParams();
@@ -460,7 +568,8 @@ const plugin: ClawdbotPluginDefinition = {
         person_id: Type.Optional(Type.Number({ description: "Associated person ID" })),
         org_id: Type.Optional(Type.Number({ description: "Associated organization ID" })),
         note: Type.Optional(Type.String({ description: "Activity notes/description" })),
-        done: Type.Optional(Type.Number({ description: "Mark as done: 0 = not done, 1 = done" })),
+        done: Type.Optional(Type.Boolean({ description: "Mark as done: true = done, false = not done" })),
+        owner_id: Type.Optional(Type.Number({ description: "Owner user ID" })),
       }),
       async execute(_id, params) {
         const data = await pipedriveRequest("/activities", {
@@ -480,13 +589,14 @@ const plugin: ClawdbotPluginDefinition = {
         type: Type.Optional(Type.String({ description: "New type" })),
         due_date: Type.Optional(Type.String({ description: "New due date (YYYY-MM-DD)" })),
         due_time: Type.Optional(Type.String({ description: "New due time (HH:MM)" })),
-        done: Type.Optional(Type.Number({ description: "Mark as done: 0 = not done, 1 = done" })),
+        done: Type.Optional(Type.Boolean({ description: "Mark as done: true = done, false = not done" })),
         note: Type.Optional(Type.String({ description: "New notes" })),
+        owner_id: Type.Optional(Type.Number({ description: "New owner user ID" })),
       }),
       async execute(_id, params) {
         const { id, ...updateParams } = params as { id: number } & Record<string, unknown>;
         const data = await pipedriveRequest(`/activities/${id}`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify(updateParams),
         });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -495,7 +605,7 @@ const plugin: ClawdbotPluginDefinition = {
 
     api.registerTool({
       name: "pipedrive_delete_activity",
-      description: "Delete an activity",
+      description: "Delete an activity (marks as deleted, 30-day retention)",
       parameters: Type.Object({
         id: Type.Number({ description: "Activity ID to delete" }),
       }),
@@ -506,34 +616,74 @@ const plugin: ClawdbotPluginDefinition = {
       },
     });
 
-    // ============ PIPELINES & STAGES ============
+    // ============ PIPELINES (v2) ============
 
     api.registerTool({
       name: "pipedrive_list_pipelines",
       description: "List all pipelines",
-      parameters: Type.Object({}),
-      async execute() {
-        const data = await pipedriveRequest("/pipelines");
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number({ description: "Number of results" })),
+        cursor: Type.Optional(Type.String({ description: "Pagination cursor" })),
+      }),
+      async execute(_id, params) {
+        const query = new URLSearchParams();
+        for (const [key, value] of Object.entries(params)) {
+          if (value !== undefined) query.set(key, String(value));
+        }
+        const endpoint = query.toString() ? `/pipelines?${query}` : "/pipelines";
+        const data = await pipedriveRequest(endpoint);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
+
+    api.registerTool({
+      name: "pipedrive_get_pipeline",
+      description: "Get details of a specific pipeline by ID",
+      parameters: Type.Object({
+        id: Type.Number({ description: "Pipeline ID" }),
+      }),
+      async execute(_id, params) {
+        const { id } = params as { id: number };
+        const data = await pipedriveRequest(`/pipelines/${id}`);
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    // ============ STAGES (v2) ============
 
     api.registerTool({
       name: "pipedrive_list_stages",
       description: "List all stages, optionally filtered by pipeline",
       parameters: Type.Object({
         pipeline_id: Type.Optional(Type.Number({ description: "Filter by pipeline ID" })),
+        limit: Type.Optional(Type.Number({ description: "Number of results" })),
+        cursor: Type.Optional(Type.String({ description: "Pagination cursor" })),
       }),
       async execute(_id, params) {
-        const { pipeline_id } = params as { pipeline_id?: number };
-        let endpoint = "/stages";
-        if (pipeline_id) endpoint += `?pipeline_id=${pipeline_id}`;
+        const query = new URLSearchParams();
+        for (const [key, value] of Object.entries(params)) {
+          if (value !== undefined) query.set(key, String(value));
+        }
+        const endpoint = query.toString() ? `/stages?${query}` : "/stages";
         const data = await pipedriveRequest(endpoint);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
 
-    // ============ NOTES ============
+    api.registerTool({
+      name: "pipedrive_get_stage",
+      description: "Get details of a specific stage by ID",
+      parameters: Type.Object({
+        id: Type.Number({ description: "Stage ID" }),
+      }),
+      async execute(_id, params) {
+        const { id } = params as { id: number };
+        const data = await pipedriveRequest(`/stages/${id}`);
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    // ============ NOTES (v1 - no v2 available yet) ============
 
     api.registerTool({
       name: "pipedrive_list_notes",
@@ -543,13 +693,27 @@ const plugin: ClawdbotPluginDefinition = {
         person_id: Type.Optional(Type.Number({ description: "Filter by person ID" })),
         org_id: Type.Optional(Type.Number({ description: "Filter by organization ID" })),
         limit: Type.Optional(Type.Number({ description: "Number of results" })),
+        start: Type.Optional(Type.Number({ description: "Pagination offset" })),
       }),
       async execute(_id, params) {
         const query = new URLSearchParams();
         for (const [key, value] of Object.entries(params)) {
           if (value !== undefined) query.set(key, String(value));
         }
-        const data = await pipedriveRequest(`/notes?${query}`);
+        const data = await pipedriveRequest(`/notes?${query}`, { useV1: true });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    api.registerTool({
+      name: "pipedrive_get_note",
+      description: "Get details of a specific note by ID",
+      parameters: Type.Object({
+        id: Type.Number({ description: "Note ID" }),
+      }),
+      async execute(_id, params) {
+        const { id } = params as { id: number };
+        const data = await pipedriveRequest(`/notes/${id}`, { useV1: true });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
@@ -567,19 +731,51 @@ const plugin: ClawdbotPluginDefinition = {
         const data = await pipedriveRequest("/notes", {
           method: "POST",
           body: JSON.stringify(params),
+          useV1: true,
         });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
 
-    // ============ USERS ============
+    api.registerTool({
+      name: "pipedrive_update_note",
+      description: "Update an existing note",
+      parameters: Type.Object({
+        id: Type.Number({ description: "Note ID to update (required)" }),
+        content: Type.String({ description: "New content" }),
+      }),
+      async execute(_id, params) {
+        const { id, ...updateParams } = params as { id: number } & Record<string, unknown>;
+        const data = await pipedriveRequest(`/notes/${id}`, {
+          method: "PUT", // v1 uses PUT
+          body: JSON.stringify(updateParams),
+          useV1: true,
+        });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    api.registerTool({
+      name: "pipedrive_delete_note",
+      description: "Delete a note",
+      parameters: Type.Object({
+        id: Type.Number({ description: "Note ID to delete" }),
+      }),
+      async execute(_id, params) {
+        const { id } = params as { id: number };
+        const data = await pipedriveRequest(`/notes/${id}`, { method: "DELETE", useV1: true });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    // ============ USERS (v1 - mostly no v2 available) ============
 
     api.registerTool({
       name: "pipedrive_list_users",
       description: "List all users in the Pipedrive account",
       parameters: Type.Object({}),
       async execute() {
-        const data = await pipedriveRequest("/users");
+        const data = await pipedriveRequest("/users", { useV1: true });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
@@ -589,12 +785,27 @@ const plugin: ClawdbotPluginDefinition = {
       description: "Get the current authenticated user's details",
       parameters: Type.Object({}),
       async execute() {
-        const data = await pipedriveRequest("/users/me");
+        const data = await pipedriveRequest("/users/me", { useV1: true });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       },
     });
 
-    console.log(`[pipedrive] Registered ${22} tools for ${cfg.domain}.pipedrive.com`);
+    api.registerTool({
+      name: "pipedrive_get_user",
+      description: "Get details of a specific user by ID",
+      parameters: Type.Object({
+        id: Type.Number({ description: "User ID" }),
+      }),
+      async execute(_id, params) {
+        const { id } = params as { id: number };
+        const data = await pipedriveRequest(`/users/${id}`, { useV1: true });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      },
+    });
+
+    const v2Tools = 22;
+    const v1Tools = 6;
+    console.log(`[pipedrive] Registered ${v2Tools + v1Tools} tools (${v2Tools} v2, ${v1Tools} v1) for ${cfg.domain}.pipedrive.com`);
   },
 };
 

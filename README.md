@@ -2,15 +2,17 @@
 
 Pipedrive CRM integration plugin for [Clawdbot](https://clawd.bot).
 
+**Now using Pipedrive API v2** - 50% lower token costs, better filtering, cursor-based pagination.
+
 ## Features
 
-- **Deals**: Search, list, create, update, delete deals
-- **Persons**: Search, get, create, update contacts
-- **Organizations**: Search, get, create companies
-- **Activities**: List, create, update, delete tasks/calls/meetings
-- **Pipelines & Stages**: List pipelines and stages
-- **Notes**: List and create notes on any entity
-- **Users**: List users, get current user
+- **Deals**: Search, list, create, update, delete deals (v2)
+- **Persons**: Search, list, create, update, delete contacts (v2)
+- **Organizations**: Search, list, create, update, delete companies (v2)
+- **Activities**: List, create, update, delete tasks/calls/meetings (v2)
+- **Pipelines & Stages**: List pipelines and stages (v2)
+- **Notes**: List, create, update, delete notes (v1 - no v2 yet)
+- **Users**: List users, get current user (v1 - no v2 yet)
 
 ## Installation
 
