@@ -1,15 +1,15 @@
 {
-  "name": "clawdbot-pipedrive",
-  "version": "2.0.3",
+  "name": "openclaw-pipedrive",
+  "version": "2.1.0",
   "type": "module",
-  "description": "Pipedrive CRM integration for Clawdbot",
+  "description": "Pipedrive CRM integration for OpenClaw (API v2)",
   "author": "graileanu",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/graileanu/clawdbot-pipedrive"
+    "url": "https://github.com/graileanu/openclaw-pipedrive"
   },
-  "clawdbot": {
+  "openclaw": {
     "extensions": [
       "./index.ts"
     ]
@@ -18,9 +18,12 @@
     "@sinclair/typebox": "0.34.47"
   },
   "keywords": [
-    "clawdbot",
-    "clawdbot-plugin",
+    "openclaw",
+    "openclaw-plugin",
     "pipedrive",
     "crm"
-  ]
+  ],
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
 }

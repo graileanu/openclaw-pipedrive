@@ -1,0 +1,18 @@
+{
+  "id": "pipedrive",
+  "name": "Pipedrive CRM",
+  "description": "Pipedrive CRM integration (API v2). Manage deals, persons, organizations, activities, pipelines, notes, and users.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": { "type": "string" },
+      "domain": { "type": "string" }
+    },
+    "required": ["apiKey", "domain"]
+  },
+  "uiHints": {
+    "apiKey": { "label": "API Key", "sensitive": true, "help": "Pipedrive API token (Settings > Personal preferences > API)" },
+    "domain": { "label": "Company Domain", "placeholder": "yourcompany", "help": "Subdomain from yourcompany.pipedrive.com" }
+  }
+}
