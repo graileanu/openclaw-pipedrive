@@ -1,8 +1,8 @@
 {
   "name": "Pipedrive CRM",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "author": "graileanu",
-  "description": "Pipedrive CRM integration (API v2). Manage deals, persons, organizations, activities, pipelines, notes, and users.",
+  "description": "Pipedrive CRM integration (API v2 + v1). Manage deals, persons, organizations, activities, pipelines, notes, users, and email threads.",
   "tools": [
     "pipedrive_search_deals",
     "pipedrive_get_deal",
@@ -36,6 +36,11 @@
     "pipedrive_create_note",
     "pipedrive_update_note",
     "pipedrive_delete_note",
+    "pipedrive_list_deal_mail_messages",
+    "pipedrive_get_mail_message",
+    "pipedrive_list_mail_threads",
+    "pipedrive_get_mail_thread",
+    "pipedrive_list_mail_thread_messages",
     "pipedrive_list_users",
     "pipedrive_get_current_user",
     "pipedrive_get_user"

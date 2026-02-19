@@ -627,6 +627,89 @@ export default function register(api: { pluginConfig: unknown; registerTool: (..
     },
   });
 
+  // ============ MAIL / EMAIL (v1 - not available in v2) ============
+
+  api.registerTool({
+    name: "pipedrive_list_deal_mail_messages",
+    description: "List email messages linked to a specific deal. Returns email subjects, senders, recipients, timestamps, and body snippets.",
+    parameters: Type.Object({
+      deal_id: Type.Number({ description: "Deal ID (required)" }),
+      start: Type.Optional(Type.Number({ description: "Pagination offset (default 0)" })),
+      limit: Type.Optional(Type.Number({ description: "Number of results (default 100)" })),
+    }),
+    async execute(_id, params) {
+      const { deal_id, start, limit } = params as { deal_id: number; start?: number; limit?: number };
+      const query = new URLSearchParams();
+      if (start !== undefined) query.set("start", String(start));
+      if (limit !== undefined) query.set("limit", String(limit));
+      const qs = query.toString() ? `?${query}` : "";
+      const data = await pipedriveRequest(`/deals/${deal_id}/mailMessages${qs}`, { useV1: true });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  });
+
+  api.registerTool({
+    name: "pipedrive_get_mail_message",
+    description: "Get a specific email message by ID, including full body, headers, and attachments info",
+    parameters: Type.Object({
+      id: Type.Number({ description: "Mail message ID" }),
+      include_body: Type.Optional(Type.Boolean({ description: "Include full email body (default true)" })),
+    }),
+    async execute(_id, params) {
+      const { id, include_body } = params as { id: number; include_body?: boolean };
+      const query = new URLSearchParams();
+      if (include_body !== undefined) query.set("include_body", include_body ? "1" : "0");
+      const qs = query.toString() ? `?${query}` : "";
+      const data = await pipedriveRequest(`/mailbox/mailMessages/${id}${qs}`, { useV1: true });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  });
+
+  api.registerTool({
+    name: "pipedrive_list_mail_threads",
+    description: "List email threads from the Pipedrive mailbox. Threads group related email messages together.",
+    parameters: Type.Object({
+      folder: Type.Optional(Type.String({ description: "Mailbox folder: inbox, drafts, sent, archive (default inbox)" })),
+      start: Type.Optional(Type.Number({ description: "Pagination offset (default 0)" })),
+      limit: Type.Optional(Type.Number({ description: "Number of results (default 50)" })),
+    }),
+    async execute(_id, params) {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined) query.set(key, String(value));
+      }
+      const qs = query.toString() ? `?${query}` : "";
+      const data = await pipedriveRequest(`/mailbox/mailThreads${qs}`, { useV1: true });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  });
+
+  api.registerTool({
+    name: "pipedrive_get_mail_thread",
+    description: "Get a specific email thread by ID, including all messages in the thread",
+    parameters: Type.Object({
+      id: Type.Number({ description: "Mail thread ID" }),
+    }),
+    async execute(_id, params) {
+      const { id } = params as { id: number };
+      const data = await pipedriveRequest(`/mailbox/mailThreads/${id}`, { useV1: true });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  });
+
+  api.registerTool({
+    name: "pipedrive_list_mail_thread_messages",
+    description: "List all email messages within a specific mail thread",
+    parameters: Type.Object({
+      id: Type.Number({ description: "Mail thread ID" }),
+    }),
+    async execute(_id, params) {
+      const { id } = params as { id: number };
+      const data = await pipedriveRequest(`/mailbox/mailThreads/${id}/mailMessages`, { useV1: true });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  });
+
   // ============ USERS (v1 - mostly no v2 available) ============
 
   api.registerTool({
@@ -663,6 +746,6 @@ export default function register(api: { pluginConfig: unknown; registerTool: (..
   });
 
   const v2Tools = 27;
-  const v1Tools = 8;
+  const v1Tools = 13;
   console.log(`[pipedrive] Registered ${v2Tools + v1Tools} tools (${v2Tools} v2, ${v1Tools} v1) for ${domain}.pipedrive.com`);
 }

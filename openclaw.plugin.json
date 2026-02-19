@@ -1,7 +1,7 @@
 {
   "id": "pipedrive",
   "name": "Pipedrive CRM",
-  "description": "Pipedrive CRM integration (API v2). Manage deals, persons, organizations, activities, pipelines, notes, and users.",
+  "description": "Pipedrive CRM integration (API v2 + v1). Manage deals, persons, organizations, activities, pipelines, notes, users, and email threads.",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
