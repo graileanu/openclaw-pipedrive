@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-pipedrive",
+  "name": "pipedrive",
   "version": "2.1.0",
   "type": "module",
   "description": "Pipedrive CRM integration for OpenClaw (API v2)",
