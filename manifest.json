@@ -41,7 +41,17 @@
     "pipedrive_get_user"
   ],
   "uiHints": {
-    "apiKey": { "label": "API Key", "sensitive": true },
-    "domain": { "label": "Company Domain" }
+    "apiKey": {
+      "label": "API Key",
+      "type": "password",
+      "required": true,
+      "description": "Your Pipedrive API token (Settings > Personal preferences > API)"
+    },
+    "domain": {
+      "label": "Company Domain",
+      "type": "string",
+      "required": true,
+      "description": "Your Pipedrive subdomain (e.g. 'mycompany' from mycompany.pipedrive.com)"
+    }
   }
 }
